@@ -157,17 +157,9 @@ class Server {
                 reply.code(constant_1.HTTP_STATUS.BAD_REQUEST).send({ error: constant_1.ERROR_MESSAGES.INVALID_SSE_SESSION });
                 return;
             }
-            reply.raw.setHeader('Content-Type', 'text/event-stream');
-            reply.raw.setHeader('Cache-Control', 'no-cache');
-            reply.raw.setHeader('Connection', 'keep-alive');
-            reply.raw.flushHeaders(); // Ensure headers are sent immediately
             try {
-                // transport.handleRequest will take over the response stream
+                // transport.handleRequest will take over the response stream and send headers
                 await transport.handleRequest(request.raw, reply.raw);
-                if (!reply.sent) {
-                    // If transport didn't send anything (unlikely for SSE initial handshake)
-                    reply.hijack(); // Prevent Fastify from automatically sending response
-                }
             }
             catch (error) {
                 if (!reply.raw.writableEnded) {
@@ -176,7 +168,6 @@ class Server {
             }
             request.socket.on('close', () => {
                 request.log.info(`SSE client disconnected for session: ${sessionId}`);
-                // transport's onclose should handle its own cleanup
             });
         });
         this.fastify.delete('/mcp', async (request, reply) => {
@@ -189,11 +180,8 @@ class Server {
                 return;
             }
             try {
+                // Let transport handleRequest close the session - do NOT send additional response
                 await transport.handleRequest(request.raw, reply.raw);
-                // Assume transport.handleRequest will send response or transport.onclose will cleanup
-                if (!reply.sent) {
-                    reply.code(constant_1.HTTP_STATUS.NO_CONTENT).send();
-                }
             }
             catch (error) {
                 if (!reply.sent) {
